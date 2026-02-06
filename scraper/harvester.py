@@ -144,9 +144,15 @@ class AccountHarvester:
                         continue
 
                     # Извлекаем ID через regex (#170624)
-                    id_match = re.search(r'#(\d+)', row_text)
-                    if not id_match:
+                    if not row_text or 'Пользователь' in row_text:
                         continue
+
+                    # Проверяем наличие ID и username
+                    id_match = re.search(r'#(\d+)', row_text)
+                    username_match = re.search(r'@([\w\-\.]+)', row_text)
+
+                    if not id_match or not username_match:
+                        continue  # Это не строка с аккаунтом
 
                     account_id = id_match.group(1)
 
@@ -354,11 +360,10 @@ class AccountHarvester:
         """Переход на следующую страницу"""
         try:
             next_selectors = [
-                'li.next a',
-                'a[rel="next"]',
-                '.pagination .next a',
+                'li.next:not(.disabled) a',
+                'a[rel="next"]:not(.disabled)',
+                '.pagination .next:not(.disabled) a',
             ]
-
             for selector in next_selectors:
                 next_button = self.page.query_selector(selector)
                 if next_button:

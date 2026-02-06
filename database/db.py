@@ -19,12 +19,18 @@ class Database:
             with open(schema_path, 'r', encoding='utf-8') as f:
                 conn.executescript(f.read())
 
-    def add_account(self, account_id: str, username: str, token_url: str = None):
-        """Добавить аккаунт"""
+    def add_account(self, account_id: str, username: str, token_url: str):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
-                INSERT OR IGNORE INTO accounts (account_id, username, token_url)
-                VALUES (?, ?, ?)
+                INSERT INTO accounts (account_id, username, token_url, status)
+                VALUES (?, ?, ?, 'pending')
+                ON CONFLICT(account_id) DO UPDATE SET
+                    username = excluded.username,
+                    token_url = excluded.token_url,
+                    status = CASE 
+                        WHEN status = 'completed' THEN 'completed'
+                        ELSE 'pending'
+                    END
             ''', (account_id, username, token_url))
 
     def update_account_token(self, account_id: str, token_url: str):
@@ -179,3 +185,4 @@ class Database:
                 WHERE status IN ('pending', 'in_progress')
             ''')
             return cursor.fetchone()[0]
+    

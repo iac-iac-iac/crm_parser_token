@@ -150,9 +150,12 @@ class ScraperOrchestrator:
         """Генерация отчета"""
         generate_excel_report(self.db)
 
+    @staticmethod
     def show_stats():
-        """Показать статистику БД"""
         db = Database()
+        stats = db.get_stats()  # Добавить метод в Database
+        for status, count in stats.items():
+            logger.info(f"   {status}: {count}")
 
         with sqlite3.connect(config.DB_PATH) as conn:
             # Статистика аккаунтов
