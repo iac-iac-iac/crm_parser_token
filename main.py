@@ -150,34 +150,26 @@ class ScraperOrchestrator:
         """Генерация отчета"""
         generate_excel_report(self.db)
 
+    # ✅ ИСПРАВЛЕНИЕ (в main.py, строки 172-192)
     @staticmethod
     def show_stats():
         db = Database()
-        stats = db.get_stats()  # Добавить метод в Database
-        for status, count in stats.items():
-            logger.info(f"   {status}: {count}")
-
+        
+        logger.info("📊 Статистика аккаунтов:")
+        
+        # Получаем статистику через SQL
         with sqlite3.connect(config.DB_PATH) as conn:
-            # Статистика аккаунтов
             cursor = conn.execute('''
                 SELECT status, COUNT(*) as count 
                 FROM accounts 
                 GROUP BY status
             ''')
-
-            logger.info("📊 Статистика аккаунтов:")
             for row in cursor:
                 logger.info(f"   {row[0]}: {row[1]}")
-
-            # Общие данные
-            cursor = conn.execute('SELECT COUNT(*) FROM accounts')
-            total_accounts = cursor.fetchone()[0]
-
-            cursor = conn.execute('SELECT COUNT(*) FROM phones')
-            total_phones = cursor.fetchone()[0]
-
-            logger.info(f"\n📋 Всего аккаунтов: {total_accounts}")
-            logger.info(f"📞 Всего номеров: {total_phones}")
+        
+        # Общие данные через методы Database
+        logger.info(f"\n📋 Всего аккаунтов: {len(db.get_all_accounts_summary())}")
+        logger.info(f"📞 Всего номеров: {db.get_total_phones()}")
 
 
 def main():

@@ -140,26 +140,31 @@ class AccountHarvester:
                     row_text = row.inner_text()
 
                     # Пропускаем заголовки и пустые строки
-                    if not row_text or 'Пользователь' in row_text or 'клиент' not in row_text.lower():
-                        continue
-
-                    # Извлекаем ID через regex (#170624)
                     if not row_text or 'Пользователь' in row_text:
                         continue
 
-                    # Проверяем наличие ID и username
+                    # Проверяем наличие ID и username (не полагаемся на слово "клиент")
                     id_match = re.search(r'#(\d+)', row_text)
                     username_match = re.search(r'@([\w\-\.]+)', row_text)
 
                     if not id_match or not username_match:
                         continue  # Это не строка с аккаунтом
 
-                    account_id = id_match.group(1)
 
-                    # Извлекаем username через regex (@username)
+                    id_match = re.search(r'#(\d+)', row_text)
                     username_match = re.search(r'@([\w\-\.]+)', row_text)
-                    if not username_match:
+
+                    if not id_match or not username_match:
                         continue
+
+                    account_id = id_match.group(1)
+                    username = username_match.group(1)  # ← Используем уже найденный match
+
+                    accounts.append({
+                        'account_id': account_id,
+                        'username': username
+                    })
+
 
                     username = username_match.group(1)
 
@@ -215,31 +220,6 @@ class AccountHarvester:
             token_url = None
             network_intercepted = False
 
-            def handle_response(response):
-                nonlocal token_url, network_intercepted
-                if 'create-token' in response.url and response.status == 200:
-                    try:
-                        data = response.json()
-                        # Ищем токен в JSON ответе
-                        if 'url' in data:
-                            token_url = data['url']
-                            network_intercepted = True
-                        elif 'token' in data:
-                            token_url = f"{config.BASE_URL}/signin?token={data['token']}"
-                            network_intercepted = True
-                        logger.debug(f"   Network response: {data}")
-                    except:
-                        # Если не JSON, пробуем как текст
-                        text = response.text()
-                        if 'signin?token=' in text:
-                            import re
-                            match = re.search(
-                                r'(http[s]?://[^\s"\'<>]+signin\?token=[^\s"\'<>]+)', text)
-                            if match:
-                                token_url = match.group(1)
-                                network_intercepted = True
-
-            self.page.on('response', handle_response)
 
             # СПОСОБ 2: Перехватываем dialog
             dialog_appeared = False
@@ -314,7 +294,6 @@ class AccountHarvester:
                     pass
 
             # Убираем listeners
-            self.page.remove_listener('response', handle_response)
             self.page.remove_listener('dialog', handle_dialog)
 
             if token_url:
