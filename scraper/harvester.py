@@ -144,38 +144,27 @@ class AccountHarvester:
                         continue
 
                     # Проверяем наличие ID и username (не полагаемся на слово "клиент")
+                    # ✅ ИСПРАВЛЕННАЯ ВЕРСИЯ
+                    # Проверяем наличие ID и username
                     id_match = re.search(r'#(\d+)', row_text)
                     username_match = re.search(r'@([\w\-\.]+)', row_text)
 
                     if not id_match or not username_match:
                         continue  # Это не строка с аккаунтом
 
-
-                    id_match = re.search(r'#(\d+)', row_text)
-                    username_match = re.search(r'@([\w\-\.]+)', row_text)
-
-                    if not id_match or not username_match:
-                        continue
-
+                    # Извлекаем значения
                     account_id = id_match.group(1)
-                    username = username_match.group(1)  # ← Используем уже найденный match
-
-                    accounts.append({
-                        'account_id': account_id,
-                        'username': username
-                    })
-
-
                     username = username_match.group(1)
 
+                    # Добавляем в список
                     accounts.append({
                         'account_id': account_id,
                         'username': username
                     })
 
                     if idx < 3:  # Логируем первые 3 для проверки
-                        logger.debug(
-                            f"   Найден: ID={account_id}, User={username}")
+                        logger.debug(f"   Найден: ID={account_id}, User={username}")
+
 
                 except Exception as e:
                     logger.debug(f"   Ошибка парсинга строки {idx}: {e}")
@@ -316,41 +305,103 @@ class AccountHarvester:
             return None
 
     def _has_next_page(self) -> bool:
-        """Проверка наличия следующей страницы"""
+        """Проверка наличия следующей страницы (Vue.js)"""
         try:
-            # Ищем активную кнопку "следующая"
+            # ИСПРАВЛЕНИЕ: Селекторы для Vue.js
             next_selectors = [
+                # Vue.js кнопки (НЕ disabled)
+                'button.v-btn:has(.icon-chevron_right):not(:disabled)',
+                'button[aria-label*="next"]:not(:disabled)',
+                
+                # Fallback для HTML
                 'li.next:not(.disabled) a',
                 'a[data-page]:not(.disabled)',
-                '.pagination .next:not(.disabled)',
-                'li:not(.disabled) > a[rel="next"]',
             ]
-
+            
             for selector in next_selectors:
                 next_button = self.page.query_selector(selector)
                 if next_button:
-                    return True
+                    # Дополнительно проверяем, что кнопка видна
+                    is_visible = self.page.is_visible(selector)
+                    if is_visible:
+                        logger.debug(f"   ✓ Найдена активная кнопка 'Next'")
+                        return True
+            
+            logger.debug("   ℹ️ Кнопка 'Next' disabled или не найдена")
+            return False
+            
+        except Exception as e:
+            logger.debug(f"   Ошибка проверки next page: {e}")
+            return False
 
-            return False
-        except:
-            return False
 
     def _go_to_next_page(self):
-        """Переход на следующую страницу"""
+        """Переход на следующую страницу (Vue.js DataTable)"""
         try:
+            # ИСПРАВЛЕНИЕ: Селекторы для Vue.js кнопок
             next_selectors = [
+                # Vue.js Material Design кнопки
+                'button.v-btn:has(.icon-chevron_right):not(:disabled)',
+                'button[aria-label*="next"]:not(:disabled)',
+                'button:has-text("Next"):not(:disabled)',
+                
+                # Fallback для обычных HTML ссылок
                 'li.next:not(.disabled) a',
                 'a[rel="next"]:not(.disabled)',
-                '.pagination .next:not(.disabled) a',
             ]
+            
+            # Запоминаем текущие данные ПЕРЕД кликом
+            old_pagination_text = None
+            try:
+                pagination = self.page.query_selector('.v-datatable_actions_pagination')
+                if pagination:
+                    old_pagination_text = pagination.inner_text()
+                    logger.debug(f"   До клика: {old_pagination_text}")
+            except:
+                pass
+            
+            # Ищем и кликаем кнопку
+            next_button = None
             for selector in next_selectors:
                 next_button = self.page.query_selector(selector)
                 if next_button:
-                    next_button.click()
-                    time.sleep(3)  # Ждем загрузки
-                    return
-
-            logger.error("Кнопка 'Следующая страница' не найдена")
-
+                    logger.debug(f"   ✓ Найдена кнопка: {selector}")
+                    break
+            
+            if not next_button:
+                logger.error("❌ Кнопка 'Следующая страница' не найдена")
+                return False
+            
+            # Кликаем
+            next_button.click()
+            logger.info("   🖱️ Клик по кнопке 'Следующая'")
+            
+            # ИСПРАВЛЕНИЕ: Ждём обновления данных (AJAX)
+            max_wait = 10  # Максимум 10 секунд
+            updated = False
+            
+            for i in range(max_wait):
+                time.sleep(1)
+                
+                # Проверяем, изменился ли текст пагинации
+                try:
+                    pagination = self.page.query_selector('.v-datatable_actions_pagination')
+                    if pagination:
+                        new_text = pagination.inner_text()
+                        if new_text != old_pagination_text:
+                            logger.info(f"   ✅ Страница обновлена: {new_text}")
+                            updated = True
+                            break
+                except:
+                    pass
+            
+            if not updated:
+                logger.warning("   ⚠️ Данные не обновились после клика")
+            
+            # Дополнительная задержка для стабильности
+            time.sleep(2)
+            return True
+            
         except Exception as e:
-            logger.error(f"Ошибка перехода на следующую страницу: {e}")
+            logger.error(f"❌ Ошибка перехода на следующую страницу: {e}")
+            return False
